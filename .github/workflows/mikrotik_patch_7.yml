@@ -289,6 +289,7 @@ jobs:
           sudo rm refind.conf
           sudo -E python3 patch.py kernel ./new_iso/isolinux/linux
           sudo cp ./new_iso/isolinux/linux ./efiboot/linux.x86_64
+          sudo cp ./new_iso/isolinux/linux ./linux.x86_64
           sudo umount ./efiboot 
           sudo cp -f efiboot.img ./new_iso/efiboot.img
           sudo mkisofs -o mikrotik-$LATEST_VERSION$ARCH.iso \
@@ -652,7 +653,7 @@ jobs:
           > syslinux.cfg
         sudo cp syslinux.cfg ./install/
         sudo rm syslinux.cfg
-        sudo cp ./BOOTX64.EFI ./install/linux
+        sudo cp ./linux.x86_64 ./install/linux
         NPK_FILES=($(find ./all_packages/*.npk))
         for ((i=1; i<=${#NPK_FILES[@]}; i++))
         do
