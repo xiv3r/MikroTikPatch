@@ -219,6 +219,18 @@ jobs:
       run: |
           sudo wget -nv -O mikrotik.iso https://download.mikrotik.com/routeros/$LATEST_VERSION/mikrotik-$LATEST_VERSION$ARCH.iso
 
+    - name: Cache refind
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86' && env.RELEASE == 'true'
+      id: cache-refind
+      uses: actions/cache@v4
+      with:
+        path: refind-bin-0.14.2.zip
+        key: refind
+        restore-keys: refind
+
+    - name: Get refind
+      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86' && steps.cache-refind.outputs.cache-hit != 'true' && env.RELEASE == 'true'
+      run: sudo wget --no-check-certificate -nv -O refind-bin-0.14.2.zip https://nchc.dl.sourceforge.net/project/refind/0.14.2/refind-bin-0.14.2.zip
 
     - name: Patch mikrotik-${{ env.LATEST_VERSION }}${{ env.ARCH }}.iso
       if: steps.get_latest.outputs.has_new_version == 'true' && (matrix.arch == 'x86' || matrix.arch == 'arm64')
@@ -263,12 +275,21 @@ jobs:
         sudo -E python3 npk.py create ./new_iso/gps-$LATEST_VERSION$ARCH.npk ./python3-$LATEST_VERSION$ARCH.npk python3 ./python3.sfs -desc="python 3.11.13"
         sudo cp python3-$LATEST_VERSION$ARCH.npk ./new_iso/
         sudo mkdir ./efiboot
-        sudo mount -o loop ./new_iso/efiboot.img ./efiboot
         if [ "${{ matrix.arch }}" == "x86" ]; then
-          sudo -E python3 patch.py kernel ./efiboot/linux.x86_64
-          sudo cp ./efiboot/linux.x86_64 ./BOOTX64.EFI
-          sudo cp ./BOOTX64.EFI ./new_iso/isolinux/linux
-          sudo umount ./efiboot
+          truncate --size 32M efiboot.img
+          sudo mkfs.fat -F16 -n ROUTEROS efiboot.img
+          sudo mount -o loop efiboot.img efiboot
+          sudo mkdir -p efiboot/EFI/BOOT
+          sudo unzip refind-bin-0.14.2.zip refind-bin-0.14.2/refind/refind_x64.efi
+          sudo cp refind-bin-0.14.2/refind/refind_x64.efi ./efiboot/EFI/BOOT/BOOTX64.EFI
+          sudo rm -rf refind-bin-0.14.2
+          echo -e 'timeout 0\ntextonly\ntextmode 0\nshowtools shutdown, reboot, exit\nmenuentry "Install RouterOS" {\n\tloader /linux.x86_64\n\toptions "load_ramdisk=1 root=/dev/ram0 -install -cdrom debug"\n}\ndefault_selection /EFI/BOOT/BOOTX64.EFI' \
+          > refind.conf
+          sudo cp refind.conf ./install/EFI/BOOT/
+          sudo -E python3 patch.py ./new_iso/isolinux/linux ./new_iso/isolinux/linux
+          sudo cp ./new_iso/isolinux/linux ./efiboot/linux.x86_64
+          sudo umount ./efiboot 
+          sudo cp -f efiboot.img ./new_iso/efiboot.img
           sudo mkisofs -o mikrotik-$LATEST_VERSION$ARCH.iso \
                       -V "MikroTik $LATEST_VERSION ${{ matrix.arch }}" \
                       -sysid "" -preparer "MiKroTiK" \
@@ -285,6 +306,7 @@ jobs:
                       -R -J \
                       ./new_iso
         elif [ "${{ matrix.arch }}" == "arm64" ]; then
+          sudo mount -o loop ./new_iso/efiboot.img ./efiboot
           sudo -E python3 patch.py kernel ./efiboot/EFI/BOOT/BOOTAA64.EFI
           sudo umount ./efiboot
           sudo xorriso -as mkisofs -o mikrotik-$LATEST_VERSION$ARCH.iso \
@@ -605,19 +627,6 @@ jobs:
         cd ./all_packages
         sudo zip ../all_packages-${{ matrix.arch }}-$LATEST_VERSION.zip *.npk
         cd ..
-
-    - name: Cache refind
-      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86' && env.RELEASE == 'true'
-      id: cache-refind
-      uses: actions/cache@v4
-      with:
-        path: refind-bin-0.14.2.zip
-        key: refind
-        restore-keys: refind
-
-    - name: Get refind
-      if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86' && steps.cache-refind.outputs.cache-hit != 'true' && env.RELEASE == 'true'
-      run: sudo wget --no-check-certificate -nv -O refind-bin-0.14.2.zip https://nchc.dl.sourceforge.net/project/refind/0.14.2/refind-bin-0.14.2.zip
 
     - name: Create install-image-${{ env.LATEST_VERSION }}${{ env.ARCH }}.img
       if: steps.get_latest.outputs.has_new_version == 'true' && matrix.arch == 'x86' && env.RELEASE == 'true'
