@@ -286,6 +286,7 @@ jobs:
           echo -e 'timeout 0\ntextonly\ntextmode 0\nshowtools shutdown, reboot, exit\nmenuentry "Install RouterOS" {\n\tloader /linux.x86_64\n\toptions "load_ramdisk=1 root=/dev/ram0 -install -cdrom debug"\n}\ndefault_selection /EFI/BOOT/BOOTX64.EFI' \
           > refind.conf
           sudo cp refind.conf ./efiboot/EFI/BOOT/
+          sudo rm refind.conf
           sudo -E python3 patch.py kernel ./new_iso/isolinux/linux
           sudo cp ./new_iso/isolinux/linux ./efiboot/linux.x86_64
           sudo umount ./efiboot 
